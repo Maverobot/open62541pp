@@ -6,8 +6,19 @@
  * - Authentication: X.509 Certificate-based
  * - SecurityMode: SignAndEncrypt
  *
- * The client loads certificates from the "pki" directory created by server_encryption.
- * Run server_encryption first to generate the certificates.
+ * The client generates its own certificate and loads trusted server certificates from
+ * the "pki/trusted_servers" directory. It also copies its certificate to the server's
+ * trusted_clients directory for mutual authentication.
+ *
+ * Directory structure:
+ *   pki/
+ *     client/
+ *       client_cert.der    - Client's certificate (generated)
+ *       client_key.pem     - Client's private key (generated)
+ *     trusted_servers/
+ *       *.der              - Trusted server certificates (loaded)
+ *     trusted_clients/
+ *       *.der              - Client copies its cert here for server to trust
  *
  * @note Requires open62541 built with encryption (UA_ENABLE_ENCRYPTION) and certificate
  *       generation support (open62541 >= v1.3 with OpenSSL/LibreSSL).
@@ -30,6 +41,19 @@
 
 namespace fs = std::filesystem;
 
+// Helper to write a ByteString to a file
+void writeFile(const fs::path& path, const opcua::ByteString& data) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Failed to open file for writing: " + path.string());
+    }
+    const auto* ptr = reinterpret_cast<const char*>(data.data());  // NOLINT
+    file.write(ptr, static_cast<std::streamsize>(data.size()));
+    if (!file) {
+        throw std::runtime_error("Failed to write file: " + path.string());
+    }
+}
+
 // Helper to read a ByteString from a file
 opcua::ByteString readFile(const fs::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -46,6 +70,21 @@ opcua::ByteString readFile(const fs::path& path) {
     return opcua::ByteString{buffer.begin(), buffer.end()};
 }
 
+// Load all .der certificate files from a directory
+std::vector<opcua::ByteString> loadCertificatesFromDirectory(const fs::path& dir) {
+    std::vector<opcua::ByteString> certificates;
+    if (!fs::exists(dir)) {
+        return certificates;
+    }
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".der") {
+            std::cout << "  Loading trusted certificate: " << entry.path().filename() << std::endl;
+            certificates.push_back(readFile(entry.path()));
+        }
+    }
+    return certificates;
+}
+
 int main(int argc, char* argv[]) {
     const CliParser parser{argc, argv};
     if (parser.hasFlag("-h") || parser.hasFlag("--help")) {
@@ -57,7 +96,9 @@ int main(int argc, char* argv[]) {
             << "This example demonstrates X.509 certificate-based authentication\n"
             << "with SignAndEncrypt security mode (Basic256Sha256 policy).\n"
             << "\n"
-            << "Run server_encryption first to generate the certificates in the 'pki' directory.\n"
+            << "The client generates its own certificate and loads server certificates\n"
+            << "from pki/trusted_servers/. It also copies its cert to pki/trusted_clients/\n"
+            << "so the server can trust it.\n"
             << std::flush;
         return 2;
     }
@@ -68,35 +109,81 @@ int main(int argc, char* argv[]) {
 
     const std::string clientApplicationUri = "urn:open62541pp.client.application";
 
-    // PKI directory paths (shared with server_encryption example)
+    // PKI directory structure
     const fs::path pkiDir = "pki";
-    const fs::path serverCertPath = pkiDir / "server_cert.der";
-    const fs::path clientCertPath = pkiDir / "client_cert.der";
-    const fs::path clientKeyPath = pkiDir / "client_key.pem";
+    const fs::path clientDir = pkiDir / "client";
+    const fs::path trustedServersDir = pkiDir / "trusted_servers";
+    const fs::path trustedClientsDir = pkiDir / "trusted_clients";  // Server looks here
+    const fs::path clientCertPath = clientDir / "client_cert.der";
+    const fs::path clientKeyPath = clientDir / "client_key.pem";
 
-    // Check if certificates exist
-    if (!fs::exists(clientCertPath) || !fs::exists(clientKeyPath) || !fs::exists(serverCertPath)) {
-        std::cerr
-            << "Certificate files not found in '" << fs::absolute(pkiDir) << "'.\n"
-            << "Please run server_encryption first to generate the certificates.\n"
-            << std::endl;
-        return 1;
+    fs::create_directories(clientDir);
+    fs::create_directories(trustedServersDir);
+    fs::create_directories(trustedClientsDir);
+
+    opcua::ByteString clientCertificate;
+    opcua::ByteString clientPrivateKey;
+
+    // Generate or load client certificate
+    if (fs::exists(clientCertPath) && fs::exists(clientKeyPath)) {
+        std::cout << "Loading existing client certificate..." << std::endl;
+        clientCertificate = readFile(clientCertPath);
+        clientPrivateKey = readFile(clientKeyPath);
+    } else {
+        std::cout << "Generating client certificate..." << std::endl;
+        const auto clientCert = opcua::createCertificate(
+            {
+                opcua::String{"C=DE"},
+                opcua::String{"O=open62541pp"},
+                opcua::String{"CN=open62541ppClient@localhost"},
+            },
+            {
+                opcua::String{"DNS:localhost"},
+                opcua::String{std::string{"URI:"} + clientApplicationUri},
+            }
+        );
+        clientCertificate = clientCert.certificate;
+        clientPrivateKey = clientCert.privateKey;
+
+        writeFile(clientCertPath, clientCertificate);
+        writeFile(clientKeyPath, clientPrivateKey);
+        std::cout << "Client certificate saved to " << clientCertPath << std::endl;
     }
 
-    std::cout << "Loading certificates from " << fs::absolute(pkiDir) << "..." << std::endl;
+    // Copy client certificate to trusted_clients directory so server can trust it
+    const fs::path trustedClientCertPath = trustedClientsDir / "client_cert.der";
+    if (!fs::exists(trustedClientCertPath)) {
+        writeFile(trustedClientCertPath, clientCertificate);
+        std::cout << "Client certificate copied to " << trustedClientCertPath << std::endl;
+        std::cout << "(Server will trust this certificate on next restart)" << std::endl;
+    }
 
-    // Load certificates from files
-    const auto clientCertificate = readFile(clientCertPath);
-    const auto clientPrivateKey = readFile(clientKeyPath);
-    const auto serverCertificate = readFile(serverCertPath);
+    // Load trusted server certificates from directory
+    std::cout << "Loading trusted server certificates from " << trustedServersDir << "..." << std::endl;
+    auto trustedServerCerts = loadCertificatesFromDirectory(trustedServersDir);
 
-    std::cout << "Certificates loaded successfully." << std::endl;
+    // Also check for server cert in server directory (for convenience)
+    const fs::path serverCertPath = pkiDir / "server" / "server_cert.der";
+    if (trustedServerCerts.empty() && fs::exists(serverCertPath)) {
+        std::cout << "  Loading server certificate from " << serverCertPath << std::endl;
+        trustedServerCerts.push_back(readFile(serverCertPath));
+        // Copy to trusted_servers for future runs
+        fs::copy_file(serverCertPath, trustedServersDir / "server_cert.der", 
+                      fs::copy_options::skip_existing);
+    }
+
+    if (trustedServerCerts.empty()) {
+        std::cerr << "No trusted server certificates found." << std::endl;
+        std::cerr << "Please run server_encryption first, then copy pki/server/server_cert.der" << std::endl;
+        std::cerr << "to pki/trusted_servers/ directory." << std::endl;
+        return 1;
+    }
 
     // Create client config with encryption enabled
     opcua::ClientConfig config{
         clientCertificate,    // Client certificate (DER)
         clientPrivateKey,     // Client private key (PEM)
-        {serverCertificate},  // Trust list - trusted server certificates (DER)
+        trustedServerCerts,   // Trust list - trusted server certificates (DER)
         {}                    // Revocation list - CRLs (DER)
     };
 
@@ -139,6 +226,8 @@ int main(int argc, char* argv[]) {
 
     } catch (const opcua::BadStatus& e) {
         std::cerr << "Connection failed: " << e.what() << std::endl;
+        std::cerr << "Make sure the server is running and trusts this client's certificate." << std::endl;
+        std::cerr << "(The server needs to be restarted to load new trusted certificates)" << std::endl;
         return 1;
     }
 
