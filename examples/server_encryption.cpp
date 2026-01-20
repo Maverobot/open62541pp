@@ -33,22 +33,28 @@ namespace fs = std::filesystem;
 void writeFile(const fs::path& path, const opcua::ByteString& data) {
     std::ofstream file(path, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Failed to write file: " + path.string());
+        throw std::runtime_error("Failed to open file for writing: " + path.string());
     }
     const auto* ptr = reinterpret_cast<const char*>(data.data());  // NOLINT
     file.write(ptr, static_cast<std::streamsize>(data.size()));
+    if (!file) {
+        throw std::runtime_error("Failed to write file: " + path.string());
+    }
 }
 
 // Helper to read a ByteString from a file
 opcua::ByteString readFile(const fs::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
-        throw std::runtime_error("Failed to read file: " + path.string());
+        throw std::runtime_error("Failed to open file for reading: " + path.string());
     }
     const auto size = file.tellg();
     file.seekg(0, std::ios::beg);
     std::vector<uint8_t> buffer(static_cast<size_t>(size));
     file.read(reinterpret_cast<char*>(buffer.data()), size);  // NOLINT
+    if (!file) {
+        throw std::runtime_error("Failed to read file: " + path.string());
+    }
     return opcua::ByteString{buffer.begin(), buffer.end()};
 }
 
