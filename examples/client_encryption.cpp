@@ -203,11 +203,8 @@ int main(int argc, char* argv[]) {
     opcua::asWrapper<opcua::String>(config->clientDescription.applicationUri) =
         opcua::String{clientApplicationUri};
 
-    // Use username/password for user authentication over the encrypted channel
-    // The transport encryption protects these credentials
-    config.setUserIdentityToken(opcua::UserNameIdentityToken{
-        opcua::String{"user"}, opcua::String{"password"}
-    });
+    // Use anonymous user authentication - the certificate trust provides authentication
+    // (No username/password needed when server trusts the client certificate)
 
     opcua::Client client{std::move(config)};
 

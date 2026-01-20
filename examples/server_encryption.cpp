@@ -147,31 +147,30 @@ int main() {
     config.setApplicationUri(serverApplicationUri);
     config.setApplicationName("open62541pp Secure Server Example");
 
-    // Disable anonymous login - require authentication
-    // Allow username/password authentication with a demo user
+    // Certificate-based authentication: clients are authenticated by their certificate
+    // If the client's certificate is in trusted_clients/, they can connect
+    // Anonymous user token is allowed since the certificate trust provides authentication
     opcua::AccessControlDefault accessControl{
-        false,  // allowAnonymous = false
-        {{opcua::String{"user"}, opcua::String{"password"}}}  // username/password login
+        true,  // allowAnonymous = true (certificate trust is the authentication)
+        {}     // no username/password logins needed
     };
     config.setAccessControl(accessControl);
 
-    // Remove anonymous user token policy from all endpoints
-    // (The endpoints are pre-configured with anonymous by default)
+    // Remove endpoints with SecurityMode::None to require encrypted connections
+    // This ensures clients must use a certificate (which must be trusted)
     auto* nativeConfig = config.handle();
+    size_t writeIdx = 0;
     for (size_t i = 0; i < nativeConfig->endpointsSize; ++i) {
         auto& endpoint = nativeConfig->endpoints[i];
-        // Filter out anonymous user identity tokens
-        size_t writeIdx = 0;
-        for (size_t j = 0; j < endpoint.userIdentityTokensSize; ++j) {
-            if (endpoint.userIdentityTokens[j].tokenType != UA_USERTOKENTYPE_ANONYMOUS) {
-                if (writeIdx != j) {
-                    endpoint.userIdentityTokens[writeIdx] = endpoint.userIdentityTokens[j];
-                }
-                ++writeIdx;
+        // Keep only endpoints that require signing or encryption
+        if (endpoint.securityMode != UA_MESSAGESECURITYMODE_NONE) {
+            if (writeIdx != i) {
+                nativeConfig->endpoints[writeIdx] = nativeConfig->endpoints[i];
             }
+            ++writeIdx;
         }
-        endpoint.userIdentityTokensSize = writeIdx;
     }
+    nativeConfig->endpointsSize = writeIdx;
 
     opcua::Server server{std::move(config)};
 
@@ -188,13 +187,12 @@ int main() {
 
     std::cout << std::endl;
     std::cout << "Secure OPC UA Server started at opc.tcp://localhost:4840" << std::endl;
-    std::cout << "Anonymous login: DISABLED" << std::endl;
-    std::cout << "Authentication: Username/Password (user: 'user', password: 'password')" << std::endl;
-    std::cout << "Supported security policies:" << std::endl;
-    std::cout << "  - Basic128Rsa15" << std::endl;
-    std::cout << "  - Basic256" << std::endl;
-    std::cout << "  - Basic256Sha256" << std::endl;
-    std::cout << "  - Aes128_Sha256_RsaOaep" << std::endl;
+    std::cout << "Authentication: Certificate-based (trusted certificates only)" << std::endl;
+    std::cout << "Supported security policies (encryption required):" << std::endl;
+    std::cout << "  - Basic128Rsa15 (Sign or SignAndEncrypt)" << std::endl;
+    std::cout << "  - Basic256 (Sign or SignAndEncrypt)" << std::endl;
+    std::cout << "  - Basic256Sha256 (Sign or SignAndEncrypt)" << std::endl;
+    std::cout << "  - Aes128_Sha256_RsaOaep (Sign or SignAndEncrypt)" << std::endl;
     std::cout << std::endl;
     std::cout << "PKI directories:" << std::endl;
     std::cout << "  - Server certificate: " << fs::absolute(serverCertPath) << std::endl;
