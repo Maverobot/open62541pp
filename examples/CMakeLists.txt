@@ -88,4 +88,10 @@ if(UA_ENABLE_SUBSCRIPTIONS_EVENTS AND UA_ENABLE_METHODCALLS)
     add_example(events/server_events.cpp)
 endif()
 
+# encryption examples require open62541 >= v1.3 with UA_ENABLE_ENCRYPTION
+if(UA_ENABLE_ENCRYPTION AND open62541_version VERSION_GREATER_EQUAL "1.3")
+    add_example(client_encryption.cpp)
+    add_example(server_encryption.cpp)
+endif()
+
 add_example(typeconversion.cpp)
