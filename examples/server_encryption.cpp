@@ -32,6 +32,7 @@
 #if defined(UA_ENABLE_ENCRYPTION) && UAPP_HAS_CREATE_CERTIFICATE
 
 #include <open62541pp/node.hpp>
+#include <open62541pp/plugin/accesscontrol_default.hpp>
 #include <open62541pp/plugin/create_certificate.hpp>
 #include <open62541pp/server.hpp>
 
@@ -146,6 +147,32 @@ int main() {
     config.setApplicationUri(serverApplicationUri);
     config.setApplicationName("open62541pp Secure Server Example");
 
+    // Disable anonymous login - require authentication
+    // Allow username/password authentication with a demo user
+    opcua::AccessControlDefault accessControl{
+        false,  // allowAnonymous = false
+        {{opcua::String{"user"}, opcua::String{"password"}}}  // username/password login
+    };
+    config.setAccessControl(accessControl);
+
+    // Remove anonymous user token policy from all endpoints
+    // (The endpoints are pre-configured with anonymous by default)
+    auto* nativeConfig = config.handle();
+    for (size_t i = 0; i < nativeConfig->endpointsSize; ++i) {
+        auto& endpoint = nativeConfig->endpoints[i];
+        // Filter out anonymous user identity tokens
+        size_t writeIdx = 0;
+        for (size_t j = 0; j < endpoint.userIdentityTokensSize; ++j) {
+            if (endpoint.userIdentityTokens[j].tokenType != UA_USERTOKENTYPE_ANONYMOUS) {
+                if (writeIdx != j) {
+                    endpoint.userIdentityTokens[writeIdx] = endpoint.userIdentityTokens[j];
+                }
+                ++writeIdx;
+            }
+        }
+        endpoint.userIdentityTokensSize = writeIdx;
+    }
+
     opcua::Server server{std::move(config)};
 
     // Add a sample variable node that clients can read/write
@@ -161,8 +188,9 @@ int main() {
 
     std::cout << std::endl;
     std::cout << "Secure OPC UA Server started at opc.tcp://localhost:4840" << std::endl;
+    std::cout << "Anonymous login: DISABLED" << std::endl;
+    std::cout << "Authentication: Username/Password (user: 'user', password: 'password')" << std::endl;
     std::cout << "Supported security policies:" << std::endl;
-    std::cout << "  - None (allows anonymous connections)" << std::endl;
     std::cout << "  - Basic128Rsa15" << std::endl;
     std::cout << "  - Basic256" << std::endl;
     std::cout << "  - Basic256Sha256" << std::endl;

@@ -203,10 +203,11 @@ int main(int argc, char* argv[]) {
     opcua::asWrapper<opcua::String>(config->clientDescription.applicationUri) =
         opcua::String{clientApplicationUri};
 
-    // Note: We use anonymous user authentication over the encrypted channel.
-    // The encryption is handled at the transport layer using the certificates.
-    // For X.509 user authentication (which is different from transport encryption),
-    // additional server-side access control configuration would be required.
+    // Use username/password for user authentication over the encrypted channel
+    // The transport encryption protects these credentials
+    config.setUserIdentityToken(opcua::UserNameIdentityToken{
+        opcua::String{"user"}, opcua::String{"password"}
+    });
 
     opcua::Client client{std::move(config)};
 
