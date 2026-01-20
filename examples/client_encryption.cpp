@@ -99,6 +99,10 @@ int main(int argc, char* argv[]) {
             << "The client generates its own certificate and loads server certificates\n"
             << "from pki/trusted_servers/. It also copies its cert to pki/trusted_clients/\n"
             << "so the server can trust it.\n"
+            << "\n"
+            << "NOTE: The generated certificate is bound to ApplicationUri:\n"
+            << "  urn:open62541pp.client.application\n"
+            << "External clients using this certificate MUST configure the same URI!\n"
             << std::flush;
         return 2;
     }
@@ -148,6 +152,11 @@ int main(int argc, char* argv[]) {
         writeFile(clientCertPath, clientCertificate);
         writeFile(clientKeyPath, clientPrivateKey);
         std::cout << "Client certificate saved to " << clientCertPath << std::endl;
+        std::cout << "Client private key saved to " << clientKeyPath << std::endl;
+        std::cout << std::endl;
+        std::cout << "IMPORTANT: This certificate is bound to ApplicationUri:" << std::endl;
+        std::cout << "  " << clientApplicationUri << std::endl;
+        std::cout << "Any client using this certificate MUST configure the same ApplicationUri!" << std::endl;
     }
 
     // Copy client certificate to trusted_clients directory so server can trust it

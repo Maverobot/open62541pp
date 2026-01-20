@@ -162,7 +162,7 @@ int main() {
     std::cout << std::endl;
     std::cout << "Secure OPC UA Server started at opc.tcp://localhost:4840" << std::endl;
     std::cout << "Supported security policies:" << std::endl;
-    std::cout << "  - None" << std::endl;
+    std::cout << "  - None (allows anonymous connections)" << std::endl;
     std::cout << "  - Basic128Rsa15" << std::endl;
     std::cout << "  - Basic256" << std::endl;
     std::cout << "  - Basic256Sha256" << std::endl;
@@ -171,6 +171,12 @@ int main() {
     std::cout << "PKI directories:" << std::endl;
     std::cout << "  - Server certificate: " << fs::absolute(serverCertPath) << std::endl;
     std::cout << "  - Trusted clients:    " << fs::absolute(trustedClientsDir) << std::endl;
+    std::cout << std::endl;
+    std::cout << "For external clients (UaExpert, python-opcua, etc.):" << std::endl;
+    std::cout << "  1. Generate your own certificate with YOUR client's ApplicationUri" << std::endl;
+    std::cout << "  2. Copy the certificate (.der) to: " << fs::absolute(trustedClientsDir) << std::endl;
+    std::cout << "  3. Restart this server to load the new certificate" << std::endl;
+    std::cout << "  Note: The certificate's URI must match the client's ApplicationUri!" << std::endl;
     std::cout << std::endl;
     std::cout << "Server is ready to accept encrypted connections." << std::endl;
     std::cout << "Press Ctrl+C to stop the server." << std::endl;
