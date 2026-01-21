@@ -156,14 +156,19 @@ int main() {
     };
     config.setAccessControl(accessControl);
 
-    // Remove endpoints with SecurityMode::None to require encrypted connections
+    // Only allow Basic256Sha256 security policy with Sign or SignAndEncrypt mode
     // This ensures clients must use a certificate (which must be trusted)
     auto* nativeConfig = config.handle();
+    const UA_String basic256Sha256Uri = UA_STRING_STATIC(
+        "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256"
+    );
     size_t writeIdx = 0;
     for (size_t i = 0; i < nativeConfig->endpointsSize; ++i) {
         auto& endpoint = nativeConfig->endpoints[i];
-        // Keep only endpoints that require signing or encryption
-        if (endpoint.securityMode != UA_MESSAGESECURITYMODE_NONE) {
+        // Keep only Basic256Sha256 endpoints with signing or encryption
+        const bool isBasic256Sha256 = UA_String_equal(&endpoint.securityPolicyUri, &basic256Sha256Uri);
+        const bool requiresEncryption = endpoint.securityMode != UA_MESSAGESECURITYMODE_NONE;
+        if (isBasic256Sha256 && requiresEncryption) {
             if (writeIdx != i) {
                 nativeConfig->endpoints[writeIdx] = nativeConfig->endpoints[i];
             }
@@ -188,11 +193,7 @@ int main() {
     std::cout << std::endl;
     std::cout << "Secure OPC UA Server started at opc.tcp://localhost:4840" << std::endl;
     std::cout << "Authentication: Certificate-based (trusted certificates only)" << std::endl;
-    std::cout << "Supported security policies (encryption required):" << std::endl;
-    std::cout << "  - Basic128Rsa15 (Sign or SignAndEncrypt)" << std::endl;
-    std::cout << "  - Basic256 (Sign or SignAndEncrypt)" << std::endl;
-    std::cout << "  - Basic256Sha256 (Sign or SignAndEncrypt)" << std::endl;
-    std::cout << "  - Aes128_Sha256_RsaOaep (Sign or SignAndEncrypt)" << std::endl;
+    std::cout << "Security policy: Basic256Sha256 only (Sign or SignAndEncrypt)" << std::endl;
     std::cout << std::endl;
     std::cout << "PKI directories:" << std::endl;
     std::cout << "  - Server certificate: " << fs::absolute(serverCertPath) << std::endl;
