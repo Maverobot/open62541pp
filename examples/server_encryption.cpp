@@ -125,23 +125,27 @@ int main() {
     }
 
     // Load trusted client certificates from directory
-    std::cout << "Loading trusted client certificates from " << trustedClientsDir << "..." << std::endl;
+    std::cout
+        << "Loading trusted client certificates from " << trustedClientsDir << "..." << std::endl;
     auto trustedClientCerts = loadCertificatesFromDirectory(trustedClientsDir);
     if (trustedClientCerts.empty()) {
         std::cout << "  No trusted client certificates found." << std::endl;
-        std::cout << "  Copy client certificates (.der files) to " << trustedClientsDir << std::endl;
-        std::cout << "  Or run client_encryption first to generate and copy its certificate." << std::endl;
+        std::cout
+            << "  Copy client certificates (.der files) to " << trustedClientsDir << std::endl;
+        std::cout << "  Or run client_encryption first to generate and copy its certificate."
+                  << std::endl;
     }
 
     // Create server config with encryption enabled
-    // Security policies enabled: None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128_Sha256_RsaOaep
+    // Security policies enabled: None, Basic128Rsa15, Basic256, Basic256Sha256,
+    // Aes128_Sha256_RsaOaep
     opcua::ServerConfig config{
-        4840,               // Port
+        4840,  // Port
         serverCertificate,  // Server certificate (DER)
-        serverPrivateKey,   // Server private key (PEM)
-        trustedClientCerts, // Trust list - trusted client certificates (DER)
-        {},                 // Issuer list - CA certificates (DER)
-        {}                  // Revocation list - CRLs (DER)
+        serverPrivateKey,  // Server private key (PEM)
+        trustedClientCerts,  // Trust list - trusted client certificates (DER)
+        {},  // Issuer list - CA certificates (DER)
+        {}  // Revocation list - CRLs (DER)
     };
 
     config.setApplicationUri(serverApplicationUri);
@@ -152,7 +156,7 @@ int main() {
     // Anonymous user token is allowed since the certificate trust provides authentication
     opcua::AccessControlDefault accessControl{
         true,  // allowAnonymous = true (certificate trust is the authentication)
-        {}     // no username/password logins needed
+        {}  // no username/password logins needed
     };
     config.setAccessControl(accessControl);
 
@@ -166,8 +170,11 @@ int main() {
     for (size_t i = 0; i < nativeConfig->endpointsSize; ++i) {
         auto& endpoint = nativeConfig->endpoints[i];
         // Keep only Basic256Sha256 endpoints with signing or encryption
-        const bool isBasic256Sha256 = UA_String_equal(&endpoint.securityPolicyUri, &basic256Sha256Uri);
-        const bool requiresEncryption = endpoint.securityMode != UA_MESSAGESECURITYMODE_NONE;
+        const bool isBasic256Sha256 = UA_String_equal(
+            &endpoint.securityPolicyUri, &basic256Sha256Uri
+        );
+        const bool requiresEncryption = endpoint.securityMode !=
+            UA_MESSAGESECURITYMODE_SIGNANDENCRYPT;
         if (isBasic256Sha256 && requiresEncryption) {
             if (writeIdx != i) {
                 nativeConfig->endpoints[writeIdx] = nativeConfig->endpoints[i];
@@ -200,10 +207,13 @@ int main() {
     std::cout << "  - Trusted clients:    " << fs::absolute(trustedClientsDir) << std::endl;
     std::cout << std::endl;
     std::cout << "For external clients (UaExpert, python-opcua, etc.):" << std::endl;
-    std::cout << "  1. Generate your own certificate with YOUR client's ApplicationUri" << std::endl;
-    std::cout << "  2. Copy the certificate (.der) to: " << fs::absolute(trustedClientsDir) << std::endl;
+    std::cout
+        << "  1. Generate your own certificate with YOUR client's ApplicationUri" << std::endl;
+    std::cout
+        << "  2. Copy the certificate (.der) to: " << fs::absolute(trustedClientsDir) << std::endl;
     std::cout << "  3. Restart this server to load the new certificate" << std::endl;
-    std::cout << "  Note: The certificate's URI must match the client's ApplicationUri!" << std::endl;
+    std::cout
+        << "  Note: The certificate's URI must match the client's ApplicationUri!" << std::endl;
     std::cout << std::endl;
     std::cout << "Server is ready to accept encrypted connections." << std::endl;
     std::cout << "Press Ctrl+C to stop the server." << std::endl;
